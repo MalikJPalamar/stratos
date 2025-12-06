@@ -17,9 +17,10 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=True)
-    hashed_password = Column(String, nullable=True)  # Nullable for Google OAuth users
-    auth_provider = Column(String, default="email")  # "email" or "google"
+    hashed_password = Column(String, nullable=True)  # Nullable for OAuth users
+    auth_provider = Column(String, default="email")  # "email", "google", or "github"
     google_id = Column(String, unique=True, nullable=True, index=True)
+    github_id = Column(String, unique=True, nullable=True, index=True)
     profile_picture = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)

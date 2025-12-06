@@ -44,6 +44,9 @@ class UserLogin(BaseModel):
 class GoogleAuthRequest(BaseModel):
     token: str  # Google ID token
 
+class GitHubAuthRequest(BaseModel):
+    code: str  # GitHub OAuth code
+
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -543,6 +546,80 @@ def google_auth(auth_request: GoogleAuthRequest, db: Session = Depends(get_db)):
 
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid Google token")
+
+@app.post("/auth/github", response_model=Token)
+def github_auth(auth_request: GitHubAuthRequest, db: Session = Depends(get_db)):
+    """Authenticate with GitHub OAuth"""
+    import requests as req
+
+    try:
+        # Exchange code for access token
+        token_response = req.post(
+            "https://github.com/login/oauth/access_token",
+            headers={"Accept": "application/json"},
+            data={
+                "client_id": "YOUR_GITHUB_CLIENT_ID",  # TODO: Move to env vars
+                "client_secret": "YOUR_GITHUB_CLIENT_SECRET",  # TODO: Move to env vars
+                "code": auth_request.code
+            }
+        )
+        token_data = token_response.json()
+
+        if "access_token" not in token_data:
+            raise HTTPException(status_code=401, detail="Failed to get GitHub access token")
+
+        github_token = token_data["access_token"]
+
+        # Get user info from GitHub
+        user_response = req.get(
+            "https://api.github.com/user",
+            headers={
+                "Authorization": f"Bearer {github_token}",
+                "Accept": "application/json"
+            }
+        )
+        user_data = user_response.json()
+
+        # Get user's primary email
+        email_response = req.get(
+            "https://api.github.com/user/emails",
+            headers={
+                "Authorization": f"Bearer {github_token}",
+                "Accept": "application/json"
+            }
+        )
+        emails = email_response.json()
+        primary_email = next((e["email"] for e in emails if e["primary"]), emails[0]["email"] if emails else None)
+
+        if not primary_email:
+            raise HTTPException(status_code=401, detail="No email found for GitHub account")
+
+        github_id = str(user_data["id"])
+        full_name = user_data.get("name")
+        picture = user_data.get("avatar_url")
+
+        # Check if user exists
+        user = db.query(User).filter(User.github_id == github_id).first()
+
+        if not user:
+            # Create new user
+            user = User(
+                email=primary_email,
+                full_name=full_name,
+                github_id=github_id,
+                profile_picture=picture,
+                auth_provider="github"
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+        # Create access token
+        access_token = create_access_token(data={"sub": user.id})
+        return {"access_token": access_token, "token_type": "bearer"}
+
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"GitHub authentication failed: {str(e)}")
 
 @app.get("/auth/me", response_model=UserResponse)
 def get_current_user_info(current_user: User = Depends(get_current_active_user)):

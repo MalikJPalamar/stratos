@@ -1,10 +1,25 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel, EmailStr
 from typing import List, Optional
+from sqlalchemy.orm import Session
 import random
 
+# Import authentication and database modules
+from database import get_db, User, init_db
+from auth import (
+    create_access_token,
+    get_password_hash,
+    verify_password,
+    get_current_active_user,
+    get_optional_user
+)
+
 app = FastAPI(title="StratOS Backend API")
+
+# Initialize database
+init_db()
 
 # CORS Configuration
 app.add_middleware(
@@ -15,7 +30,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Models
+# ==================== AUTHENTICATION MODELS ====================
+
+class UserSignup(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: Optional[str] = None
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class GoogleAuthRequest(BaseModel):
+    token: str  # Google ID token
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    full_name: Optional[str]
+    auth_provider: str
+    profile_picture: Optional[str]
+    current_level: int
+    xp: int
+    accuracy: float
+    current_streak: int
+    best_streak: int
+
+    class Config:
+        from_attributes = True
+
+# ==================== GAME MODELS ====================
+
 class Signal(BaseModel):
     id: int
     title: str
@@ -412,6 +461,140 @@ SIGNALS_DB = [
         "cipherCategory": None
     }
 ]
+
+# ==================== AUTHENTICATION ENDPOINTS ====================
+
+@app.post("/auth/signup", response_model=Token)
+def signup(user_data: UserSignup, db: Session = Depends(get_db)):
+    """Register a new user with email/password"""
+    # Check if user already exists
+    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    # Create new user
+    hashed_password = get_password_hash(user_data.password)
+    new_user = User(
+        email=user_data.email,
+        full_name=user_data.full_name,
+        hashed_password=hashed_password,
+        auth_provider="email"
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    # Create access token
+    access_token = create_access_token(data={"sub": new_user.id})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/auth/login", response_model=Token)
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """Login with email/password"""
+    user = db.query(User).filter(User.email == form_data.username).first()
+    if not user or not user.hashed_password:
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+
+    if not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+
+    access_token = create_access_token(data={"sub": user.id})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/auth/google", response_model=Token)
+def google_auth(auth_request: GoogleAuthRequest, db: Session = Depends(get_db)):
+    """Authenticate with Google OAuth"""
+    from google.oauth2 import id_token
+    from google.auth.transport import requests
+
+    try:
+        # Verify the Google token
+        idinfo = id_token.verify_oauth2_token(
+            auth_request.token,
+            requests.Request(),
+            # You would set this in production: os.getenv("GOOGLE_CLIENT_ID")
+        )
+
+        # Get user info from token
+        google_id = idinfo['sub']
+        email = idinfo['email']
+        full_name = idinfo.get('name')
+        picture = idinfo.get('picture')
+
+        # Check if user exists
+        user = db.query(User).filter(User.google_id == google_id).first()
+
+        if not user:
+            # Create new user
+            user = User(
+                email=email,
+                full_name=full_name,
+                google_id=google_id,
+                profile_picture=picture,
+                auth_provider="google"
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+        # Create access token
+        access_token = create_access_token(data={"sub": user.id})
+        return {"access_token": access_token, "token_type": "bearer"}
+
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+
+@app.get("/auth/me", response_model=UserResponse)
+def get_current_user_info(current_user: User = Depends(get_current_active_user)):
+    """Get current authenticated user info"""
+    return current_user
+
+@app.put("/auth/profile", response_model=UserResponse)
+def update_profile(
+    full_name: Optional[str] = None,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Update user profile"""
+    if full_name is not None:
+        current_user.full_name = full_name
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+# ==================== GAME PROGRESS ENDPOINTS ====================
+
+@app.post("/api/progress/save")
+def save_progress(
+    current_level: int,
+    xp: int,
+    accuracy: float,
+    current_streak: int,
+    best_streak: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Save user's game progress"""
+    current_user.current_level = current_level
+    current_user.xp = xp
+    current_user.accuracy = accuracy
+    current_user.current_streak = current_streak
+    current_user.best_streak = best_streak
+    db.commit()
+    return {"message": "Progress saved successfully"}
+
+@app.get("/api/progress")
+def get_progress(current_user: User = Depends(get_current_active_user)):
+    """Get user's game progress"""
+    return {
+        "current_level": current_user.current_level,
+        "xp": current_user.xp,
+        "accuracy": current_user.accuracy,
+        "current_streak": current_user.current_streak,
+        "best_streak": current_user.best_streak
+    }
+
+# ==================== PUBLIC ENDPOINTS ====================
 
 @app.get("/")
 def read_root():

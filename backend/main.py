@@ -36,6 +36,16 @@ class ScoreResponse(BaseModel):
     cipherCategory: Optional[str]
     xpGained: int
 
+class CipherClassificationRequest(BaseModel):
+    signalId: int
+    userCategory: str  # User's chosen CIPHER category
+
+class CipherClassificationResponse(BaseModel):
+    correct: bool
+    correctCategory: str
+    xpGained: int
+    explanation: str
+
 # Signals Database (In-memory for prototype)
 SIGNALS_DB = [
     # === PRACTICE Signals (Emerging behaviors being adopted) ===
@@ -448,35 +458,96 @@ def get_cipher_categories():
             {
                 "name": "Contradiction",
                 "description": "Two opposing trends or data points that don't align with established patterns",
-                "example": "Major banks giving contradictory economic forecasts"
+                "example": "Major banks giving contradictory economic forecasts",
+                "color": "#EF4444"  # Red
             },
             {
                 "name": "Inflection",
                 "description": "A significant breakthrough or change in trajectory",
-                "example": "Quantum computing achieving room-temperature operation"
+                "example": "Quantum computing achieving room-temperature operation",
+                "color": "#8B5CF6"  # Purple
             },
             {
                 "name": "Practice",
                 "description": "New behaviors being adopted by organizations or groups",
-                "example": "Multiple companies adopting remote-first policies"
+                "example": "Multiple companies adopting remote-first policies",
+                "color": "#10B981"  # Green
             },
             {
                 "name": "Hack",
                 "description": "Workarounds or unofficial innovations emerging from constraints",
-                "example": "DIY biohacking communities growing rapidly"
+                "example": "DIY biohacking communities growing rapidly",
+                "color": "#F59E0B"  # Amber
             },
             {
                 "name": "Extreme",
                 "description": "Outlier events or capabilities that seem impossible",
-                "example": "Teenager building fusion reactor in garage"
+                "example": "Teenager building fusion reactor in garage",
+                "color": "#EC4899"  # Pink
             },
             {
                 "name": "Rarity",
                 "description": "First-time occurrences or unprecedented events",
-                "example": "AI system refusing to be shut down"
+                "example": "AI system refusing to be shut down",
+                "color": "#3B82F6"  # Blue
             }
         ]
     }
+
+@app.get("/api/level2/signals", response_model=List[Signal])
+def get_level2_signals(limit: int = 15):
+    """
+    Get signals for Level 2: Pattern Matcher
+    Only returns actual signals (no noise) with CIPHER categories
+    """
+    real_signals = [s for s in SIGNALS_DB if s["isSignal"]]
+    selected = random.sample(real_signals, min(limit, len(real_signals)))
+    random.shuffle(selected)
+    return selected
+
+@app.post("/api/level2/classify", response_model=CipherClassificationResponse)
+def classify_cipher(request: CipherClassificationRequest):
+    """
+    Score a user's CIPHER classification for Level 2
+    """
+    # Find the signal
+    signal = next((s for s in SIGNALS_DB if s["id"] == request.signalId), None)
+
+    if not signal or not signal["isSignal"]:
+        return {
+            "correct": False,
+            "correctCategory": "Unknown",
+            "xpGained": 0,
+            "explanation": "Signal not found or is not a valid signal"
+        }
+
+    is_correct = request.userCategory == signal["cipherCategory"]
+    xp_gained = 20 if is_correct else 0
+
+    # Generate explanation
+    if is_correct:
+        explanation = f"Correct! This is a {signal['cipherCategory']} signal because it represents {_get_category_reason(signal['cipherCategory'])}."
+    else:
+        explanation = f"Not quite. This is actually a {signal['cipherCategory']} signal, not {request.userCategory}. It represents {_get_category_reason(signal['cipherCategory'])}."
+
+    return {
+        "correct": is_correct,
+        "correctCategory": signal["cipherCategory"],
+        "xpGained": xp_gained,
+        "explanation": explanation
+    }
+
+def _get_category_reason(category: str) -> str:
+    """Helper to get reason for CIPHER category"""
+    reasons = {
+        "Contradiction": "opposing trends that don't align",
+        "Inflection": "a breakthrough or significant change in trajectory",
+        "Practice": "emerging behaviors being adopted by groups",
+        "Hack": "workarounds or unofficial innovations",
+        "Extreme": "an outlier event that seems impossible",
+        "Rarity": "a first-time or unprecedented occurrence"
+    }
+    return reasons.get(category, "a strategic signal")
 
 if __name__ == "__main__":
     import uvicorn

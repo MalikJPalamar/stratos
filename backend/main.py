@@ -549,6 +549,88 @@ def _get_category_reason(category: str) -> str:
     }
     return reasons.get(category, "a strategic signal")
 
+@app.get("/api/level3/scenario")
+def get_scenario(x: float = 0, y: float = 0):
+    """
+    Generate scenario based on position in 2D space
+    X-axis: Economic Growth (-1 to 1)
+    Y-axis: Tech Advancement (-1 to 1)
+    """
+    # Determine quadrant
+    if x >= 0 and y >= 0:
+        quadrant = "Abundant Future"
+        scenario_type = "optimistic"
+    elif x < 0 and y >= 0:
+        quadrant = "Tech Divide"
+        scenario_type = "mixed"
+    elif x < 0 and y < 0:
+        quadrant = "Slow Decline"
+        scenario_type = "pessimistic"
+    else:  # x >= 0 and y < 0
+        quadrant = "Material World"
+        scenario_type = "traditional"
+
+    # Generate narrative based on position
+    scenarios = {
+        "Abundant Future": {
+            "title": "The Abundant Future",
+            "year": 2040,
+            "description": "High economic growth meets rapid technological advancement. Clean energy powers thriving cities. AI augments human creativity. Abundance is the new normal.",
+            "economy": "Strong and equitable growth",
+            "technology": "Breakthrough innovations widespread",
+            "society": "Collaborative and prosperous",
+            "environment": "Regenerative practices dominant",
+            "color": "#10B981",  # Green
+            "emoji": "🌟"
+        },
+        "Tech Divide": {
+            "title": "The Tech Divide",
+            "year": 2040,
+            "description": "Technology races ahead while economies struggle. AI exists but few can afford it. Innovation happens in pockets. Inequality widens between digital haves and have-nots.",
+            "economy": "Stagnant with regional pockets",
+            "technology": "Advanced but unequally distributed",
+            "society": "Fragmented and polarized",
+            "environment": "Mixed results from tech solutions",
+            "color": "#F59E0B",  # Amber
+            "emoji": "⚡"
+        },
+        "Slow Decline": {
+            "title": "The Slow Decline",
+            "year": 2040,
+            "description": "Both economy and technology stagnate. Climate challenges mount. Innovation slows. Traditional systems strain under pressure. Adaptation becomes survival.",
+            "economy": "Contracting and resource-scarce",
+            "technology": "Incremental improvements only",
+            "society": "Defensive and conservative",
+            "environment": "Degraded ecosystems",
+            "color": "#EF4444",  # Red
+            "emoji": "🌧️"
+        },
+        "Material World": {
+            "title": "The Material World",
+            "year": 2040,
+            "description": "Economic growth continues but tech progress slows. Traditional industries thrive. Physical infrastructure dominates. Digital transformation stalls. Tangible assets reign supreme.",
+            "economy": "Growing through traditional means",
+            "technology": "Mature and stable platforms",
+            "society": "Pragmatic and grounded",
+            "environment": "Conventional approaches persist",
+            "color": "#8B5CF6",  # Purple
+            "emoji": "🏗️"
+        }
+    }
+
+    scenario = scenarios[quadrant]
+
+    # Add intensity based on distance from origin
+    import math
+    intensity = min(math.sqrt(x**2 + y**2), 1.0)
+
+    return {
+        "quadrant": quadrant,
+        "scenario": scenario,
+        "position": {"x": x, "y": y},
+        "intensity": intensity
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

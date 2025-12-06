@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useGameStore from '../store/useGameStore';
 import { Link } from 'react-router-dom';
+import confetti from 'canvas-confetti';
 
 const Level2PatternMatcher = () => {
   const {
@@ -13,7 +14,10 @@ const Level2PatternMatcher = () => {
     processLevel2Signal,
     addXP,
     updateAccuracy,
-    setCurrentLevel
+    setCurrentLevel,
+    incrementStreak,
+    resetStreak,
+    currentStreak
   } = useGameStore();
 
   const [currentSignalIndex, setCurrentSignalIndex] = useState(0);
@@ -42,6 +46,18 @@ const Level2PatternMatcher = () => {
 
   const currentSignal = level2Signals[currentSignalIndex];
 
+  const triggerConfetti = (isMultiplier = false) => {
+    const count = isMultiplier ? 200 : 100;
+    const spread = isMultiplier ? 120 : 70;
+
+    confetti({
+      particleCount: count,
+      spread: spread,
+      origin: { y: 0.6 },
+      colors: ['#EF4444', '#8B5CF6', '#10B981', '#F59E0B', '#EC4899', '#3B82F6']
+    });
+  };
+
   const handleCategorySelect = async (categoryName) => {
     if (!currentSignal) return;
 
@@ -67,16 +83,32 @@ const Level2PatternMatcher = () => {
         result.correctCategory
       );
 
+      // Handle streak and confetti
+      if (result.correct) {
+        incrementStreak();
+        addXP(result.xpGained);
+
+        // Trigger confetti
+        if (currentStreak >= 4) {
+          triggerConfetti(true);
+        } else {
+          triggerConfetti();
+        }
+
+        // Bonus XP for streaks
+        if (currentStreak >= 2) {
+          const bonusXP = Math.min(currentStreak * 3, 30);
+          addXP(bonusXP);
+        }
+      } else {
+        resetStreak();
+      }
+
       // Show feedback
       setFeedback({
         correct: result.correct,
         explanation: result.explanation
       });
-
-      // Add XP if correct
-      if (result.correct) {
-        addXP(result.xpGained);
-      }
 
       // Update accuracy
       const totalProcessed = level2ProcessedSignals.length + 1;
@@ -149,12 +181,27 @@ const Level2PatternMatcher = () => {
     );
   }
 
+  const progress = (currentSignalIndex / level2Signals.length) * 100;
+
   return (
     <div className="min-h-[80vh] py-8">
       {/* Header */}
       <div className="text-center mb-8">
         <h2 className="text-4xl font-bold mb-2">Level 2: Pattern Matcher</h2>
-        <p className="text-gray-400 mb-4">Classify signals into CIPHER categories</p>
+        <p className="text-gray-400 mb-2">Classify signals into CIPHER categories</p>
+
+        {/* Progress Bar */}
+        <div className="max-w-md mx-auto mb-3">
+          <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+            <motion.div
+              className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.3 }}
+            />
+          </div>
+        </div>
+
         <div className="text-sm text-gray-500">
           Signal {currentSignalIndex + 1} of {level2Signals.length}
         </div>

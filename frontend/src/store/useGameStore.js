@@ -5,6 +5,8 @@ const useGameStore = create((set) => ({
   currentLevel: 1,
   xp: 0,
   accuracy: 0,
+  currentStreak: 0,
+  bestStreak: 0,
 
   // Level 1: Signal Hunter State
   signals: [],
@@ -19,6 +21,14 @@ const useGameStore = create((set) => ({
   setCurrentLevel: (level) => set({ currentLevel: level }),
   addXP: (amount) => set((state) => ({ xp: state.xp + amount })),
   updateAccuracy: (newAccuracy) => set({ accuracy: newAccuracy }),
+  incrementStreak: () => set((state) => {
+    const newStreak = state.currentStreak + 1;
+    return {
+      currentStreak: newStreak,
+      bestStreak: Math.max(newStreak, state.bestStreak)
+    };
+  }),
+  resetStreak: () => set({ currentStreak: 0 }),
 
   // Level 1: Signal Actions
   setSignals: (signals) => set({ signals }),
@@ -43,6 +53,8 @@ const useGameStore = create((set) => ({
     currentLevel: 1,
     xp: 0,
     accuracy: 0,
+    currentStreak: 0,
+    bestStreak: 0,
     signals: [],
     processedSignals: [],
     level2Signals: [],

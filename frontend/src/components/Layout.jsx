@@ -3,7 +3,7 @@ import useGameStore from '../store/useGameStore';
 import { motion } from 'framer-motion';
 
 const Layout = () => {
-  const { currentLevel, xp, accuracy } = useGameStore();
+  const { currentLevel, xp, accuracy, currentStreak, bestStreak } = useGameStore();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-brilliant-dark via-gray-900 to-black">
@@ -28,6 +28,21 @@ const Layout = () => {
               <span className="text-gray-400">Accuracy:</span>{' '}
               <span className="text-white font-semibold">{accuracy.toFixed(1)}%</span>
             </div>
+            {currentStreak > 0 && (
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="text-sm px-3 py-1 bg-orange-500/20 border border-orange-500 rounded-full"
+              >
+                <span className="text-orange-400">🔥 {currentStreak} streak</span>
+              </motion.div>
+            )}
+            {bestStreak > 0 && (
+              <div className="text-sm">
+                <span className="text-gray-400">Best:</span>{' '}
+                <span className="text-yellow-400 font-semibold">{bestStreak}</span>
+              </div>
+            )}
           </div>
         </div>
       </header>

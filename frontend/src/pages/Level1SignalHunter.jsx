@@ -1,9 +1,20 @@
 import { useState, useEffect } from 'react';
 import { motion, useMotionValue, useTransform } from 'framer-motion';
 import useGameStore from '../store/useGameStore';
+import confetti from 'canvas-confetti';
 
 const Level1SignalHunter = () => {
-  const { signals, setSignals, processSignal, addXP, updateAccuracy, processedSignals } = useGameStore();
+  const {
+    signals,
+    setSignals,
+    processSignal,
+    addXP,
+    updateAccuracy,
+    processedSignals,
+    incrementStreak,
+    resetStreak,
+    currentStreak
+  } = useGameStore();
   const [currentSignalIndex, setCurrentSignalIndex] = useState(0);
   const [feedback, setFeedback] = useState(null);
 
@@ -82,6 +93,18 @@ const Level1SignalHunter = () => {
   const rotate = useTransform(x, [-200, 200], [-25, 25]);
   const opacity = useTransform(x, [-200, -100, 0, 100, 200], [0, 1, 1, 1, 0]);
 
+  const triggerConfetti = (isMultiplier = false) => {
+    const count = isMultiplier ? 200 : 100;
+    const spread = isMultiplier ? 120 : 70;
+
+    confetti({
+      particleCount: count,
+      spread: spread,
+      origin: { y: 0.6 },
+      colors: ['#0066FF', '#8B5CF6', '#10B981', '#F59E0B', '#EC4899']
+    });
+  };
+
   const handleSwipe = (direction) => {
     if (!currentSignal) return;
 
@@ -91,6 +114,27 @@ const Level1SignalHunter = () => {
     // Process the signal
     processSignal(currentSignal, { isSignal, isCorrect });
 
+    // Handle streak
+    if (isCorrect) {
+      incrementStreak();
+      addXP(10);
+
+      // Trigger confetti
+      if (currentStreak >= 4) {
+        triggerConfetti(true); // Big confetti for streaks of 5+
+      } else {
+        triggerConfetti();
+      }
+
+      // Bonus XP for streaks
+      if (currentStreak >= 2) {
+        const bonusXP = Math.min(currentStreak * 2, 20);
+        addXP(bonusXP);
+      }
+    } else {
+      resetStreak();
+    }
+
     // Show feedback
     setFeedback({
       isCorrect,
@@ -98,11 +142,6 @@ const Level1SignalHunter = () => {
         ? `Correct! ${currentSignal.isSignal ? `This is a ${currentSignal.cipherCategory} signal.` : 'This is just noise.'}`
         : `Wrong! This was ${currentSignal.isSignal ? `a signal (${currentSignal.cipherCategory})` : 'noise'}.`
     });
-
-    // Add XP if correct
-    if (isCorrect) {
-      addXP(10);
-    }
 
     // Update accuracy
     const totalProcessed = processedSignals.length + 1;
@@ -148,12 +187,26 @@ const Level1SignalHunter = () => {
     );
   }
 
+  const progress = (currentSignalIndex / signals.length) * 100;
+
   return (
     <div className="min-h-[80vh] flex flex-col items-center justify-center py-8">
       {/* Instructions */}
       <div className="text-center mb-8">
         <h2 className="text-4xl font-bold mb-2">Level 1: Signal Hunter</h2>
         <p className="text-gray-400">Swipe right for SIGNAL • Swipe left for NOISE</p>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="w-full max-w-md mb-2">
+        <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+          <motion.div
+            className="h-full bg-gradient-to-r from-brilliant-blue to-purple-500"
+            initial={{ width: 0 }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.3 }}
+          />
+        </div>
       </div>
 
       {/* Signal Counter */}

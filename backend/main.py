@@ -631,6 +631,159 @@ def get_scenario(x: float = 0, y: float = 0):
         "intensity": intensity
     }
 
+# ==================== LEVEL 4: TIMELINE CONSTRUCTOR ====================
+
+class TimelineRequest(BaseModel):
+    scenarioName: str
+    userOrder: List[int]  # List of milestone IDs in user's order
+
+class TimelineResponse(BaseModel):
+    correct: bool
+    correctOrder: List[int]
+    xpGained: int
+    feedback: str
+
+# Timeline scenarios with milestones for backcasting
+TIMELINE_SCENARIOS = {
+    "AI Healthcare Revolution": {
+        "futureState": {
+            "year": 2035,
+            "title": "AI Transforms Healthcare",
+            "description": "AI systems diagnose diseases with 99% accuracy, personalized medicine is standard, and healthcare costs have dropped 40%.",
+            "color": "#10B981"
+        },
+        "milestones": [
+            {"id": 1, "year": 2026, "title": "FDA Approves First AI Diagnostic Tool", "order": 1},
+            {"id": 2, "year": 2028, "title": "Major Hospital Networks Adopt AI Systems", "order": 2},
+            {"id": 3, "year": 2030, "title": "Insurance Companies Mandate AI Screenings", "order": 3},
+            {"id": 4, "year": 2032, "title": "AI-Driven Drug Discovery Accelerates", "order": 4},
+            {"id": 5, "year": 2034, "title": "Universal AI Health Monitoring Launches", "order": 5}
+        ]
+    },
+    "Climate Tech Breakthrough": {
+        "futureState": {
+            "year": 2038,
+            "title": "Carbon Capture Goes Mainstream",
+            "description": "Direct air capture removes 5 billion tons of CO2 annually, renewable energy is 85% of grid, climate stabilization is within reach.",
+            "color": "#3B82F6"
+        },
+        "milestones": [
+            {"id": 1, "year": 2026, "title": "First Profitable Carbon Capture Plant Opens", "order": 1},
+            {"id": 2, "year": 2029, "title": "Global Carbon Tax Enacted by G20", "order": 2},
+            {"id": 3, "year": 2031, "title": "Battery Storage Costs Drop Below $50/kWh", "order": 3},
+            {"id": 4, "year": 2034, "title": "100 Gigascale Capture Facilities Operating", "order": 4},
+            {"id": 5, "year": 2037, "title": "Net-Zero Commitments Become Enforceable", "order": 5}
+        ]
+    },
+    "Decentralized Finance Dominance": {
+        "futureState": {
+            "year": 2036,
+            "title": "DeFi Replaces Traditional Banking",
+            "description": "60% of financial transactions occur on blockchain, traditional banks serve only 20% of population, financial inclusion reaches 95%.",
+            "color": "#F59E0B"
+        },
+        "milestones": [
+            {"id": 1, "year": 2026, "title": "Major Nation Adopts CBDC for All Transactions", "order": 1},
+            {"id": 2, "year": 2029, "title": "DeFi Lending Surpasses Traditional Banks", "order": 2},
+            {"id": 3, "year": 2031, "title": "Regulatory Framework for Crypto Established", "order": 3},
+            {"id": 4, "year": 2033, "title": "Smart Contracts Automate 50% of Legal Work", "order": 4},
+            {"id": 5, "year": 2035, "title": "Blockchain Identity Systems Go Universal", "order": 5}
+        ]
+    },
+    "Space Economy Expansion": {
+        "futureState": {
+            "year": 2040,
+            "title": "Space Mining Industry Thrives",
+            "description": "Asteroid mining generates $500B annually, 10,000 people live off-Earth, space-based solar power feeds Earth's grid.",
+            "color": "#8B5CF6"
+        },
+        "milestones": [
+            {"id": 1, "year": 2027, "title": "First Successful Asteroid Mining Mission", "order": 1},
+            {"id": 2, "year": 2030, "title": "Permanent Moon Base Established", "order": 2},
+            {"id": 3, "year": 2033, "title": "Space Launch Costs Drop to $100/kg", "order": 3},
+            {"id": 4, "year": 2036, "title": "First Space-Based Solar Array Operational", "order": 4},
+            {"id": 5, "year": 2039, "title": "Commercial Mars Flights Begin", "order": 5}
+        ]
+    }
+}
+
+@app.get("/api/level4/scenarios")
+def get_timeline_scenarios():
+    """Get all available timeline scenarios for Level 4"""
+    return {
+        "scenarios": [
+            {
+                "name": name,
+                "futureState": data["futureState"]
+            }
+            for name, data in TIMELINE_SCENARIOS.items()
+        ]
+    }
+
+@app.get("/api/level4/scenario/{scenario_name}")
+def get_scenario_milestones(scenario_name: str):
+    """Get milestones for a specific scenario (in random order)"""
+    if scenario_name not in TIMELINE_SCENARIOS:
+        return {"error": "Scenario not found"}
+
+    scenario = TIMELINE_SCENARIOS[scenario_name]
+    milestones = scenario["milestones"].copy()
+
+    # Shuffle milestones for the user to sort
+    random.shuffle(milestones)
+
+    return {
+        "scenarioName": scenario_name,
+        "futureState": scenario["futureState"],
+        "milestones": [
+            {
+                "id": m["id"],
+                "year": m["year"],
+                "title": m["title"]
+            }
+            for m in milestones
+        ]
+    }
+
+@app.post("/api/level4/validate")
+def validate_timeline(request: TimelineRequest):
+    """Validate the user's timeline ordering"""
+    scenario_name = request.scenarioName
+
+    if scenario_name not in TIMELINE_SCENARIOS:
+        return {"error": "Scenario not found"}
+
+    scenario = TIMELINE_SCENARIOS[scenario_name]
+    correct_order = [m["order"] for m in sorted(scenario["milestones"], key=lambda x: x["order"])]
+    user_order_mapped = [next(m["order"] for m in scenario["milestones"] if m["id"] == uid) for uid in request.userOrder]
+
+    is_correct = user_order_mapped == correct_order
+
+    # Calculate how many milestones are in correct position
+    correct_positions = sum(1 for i, uid in enumerate(user_order_mapped) if uid == correct_order[i])
+
+    # XP calculation
+    if is_correct:
+        xp = 150  # Full points for perfect order
+    else:
+        xp = correct_positions * 20  # Partial credit
+
+    # Generate feedback
+    if is_correct:
+        feedback = "Perfect! You've mastered backcasting. This timeline shows the logical steps from present to future."
+    elif correct_positions >= 3:
+        feedback = f"Good effort! You got {correct_positions}/5 milestones in the right position. Consider which events must happen first to enable later ones."
+    else:
+        feedback = f"Not quite. You got {correct_positions}/5 milestones correct. Think about dependencies: what needs to happen before each milestone can occur?"
+
+    return {
+        "correct": is_correct,
+        "correctOrder": [m["id"] for m in sorted(scenario["milestones"], key=lambda x: x["order"])],
+        "xpGained": xp,
+        "feedback": feedback,
+        "correctPositions": correct_positions
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
